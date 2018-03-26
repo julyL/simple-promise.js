@@ -1,0 +1,20 @@
+{
+  "name": "simple-promise.js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "simple-promise.js",
+  "devDependencies": {
+    "promises-aplus-tests": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/julyL/simple-promise.js.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/julyL/simple-promise.js/issues"
+  },
+  "homepage": "https://github.com/julyL/simple-promise.js#readme"
+}
