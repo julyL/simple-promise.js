@@ -19,7 +19,7 @@ Promise.prototype.then = function(resolveFunc, rejectFunc) {
     excuteTasks.call(this, "resolve");
     promise.value = this.value;
   }
-  if (this.status == "rejectd") {
+  if (this.status == "rejected") {
     excuteTasks.call(this, "reject");
     promise.value = this.value;
   }
@@ -108,8 +108,8 @@ function resolvePromise(pro, x) {
       onRejected.call(pro, err);
       return;
     }
-    if (isFunction(then)) {
-      try {
+    try {
+      if (isFunction(then)) {
         then.call(
           x,
           function(y) {
@@ -127,15 +127,15 @@ function resolvePromise(pro, x) {
             onRejected.call(pro, y);
           }
         );
-      } catch (err) {
-        if (isdone) {
-          return;
-        }
-        isdone = true;
-        onRejected.call(pro, err);
+      } else {
+        onFulfilled.call(pro, x);
       }
-    } else {
-      onFulfilled.call(pro, x);
+    } catch (err) {
+      if (isdone) {
+        return;
+      }
+      isdone = true;
+      onRejected.call(pro, err);
     }
   } else {
     onFulfilled.call(pro, x);
