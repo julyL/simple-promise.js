@@ -1,19 +1,20 @@
-var uid = 0;
 function Promise(func) {
-  uid++;
-  this.uid = uid;
   this.value = undefined;
   this.status = "pending";
-  this.resolveTasks = [];
-  this.rejectTasks = [];
+  this.tasks = [];
   if (isFunction(func)) {
-    func.call(this, onFulfilled.bind(this), onRejected.bind(this));
+    try {
+      func.call(this, onFulfilled.bind(this), onRejected.bind(this));
+    } catch (err) {
+      onRejected.bind(this);
+    }
   } else {
+    throw TypeError("Promise构造函数必须传函数");
   }
 }
 
 Promise.prototype.then = function(resolveFunc, rejectFunc) {
-  var promise = new Promise(function(resolve, reject) {});
+  var promise = new Promise(function() {});
   if (this.status == "resolved") {
     excuteTasks.call(this, "resolve");
     promise.value = this.value;
@@ -22,13 +23,11 @@ Promise.prototype.then = function(resolveFunc, rejectFunc) {
     excuteTasks.call(this, "reject");
     promise.value = this.value;
   }
-  this.resolveTasks.push({
-    func: resolveFunc,
-    promise: promise
-  });
-  this.rejectTasks.push({
-    func: rejectFunc,
-    promise: promise
+  this.tasks.push({
+    resolve: resolveFunc,
+    reject: rejectFunc,
+    promise: promise,
+    isdone: false
   });
   return promise;
 };
@@ -40,6 +39,7 @@ function onFulfilled(value) {
     this.value = value;
   }
 }
+
 function onRejected(value) {
   if (this.status == "pending") {
     excuteTasks.call(this, "reject");
@@ -49,36 +49,46 @@ function onRejected(value) {
 }
 
 function asyncExcute(fn) {
-  var self = this;
-  process.nextTick(function() {
-    fn.call(self);
-  });
+  setTimeout(function() {
+    fn();
+  }, 0);
 }
 
+/**
+ * 异步执行顺序队列
+ * @param {String} type
+ */
 function excuteTasks(type) {
-  var tasks = type == "resolve" ? this.resolveTasks : this.rejectTasks;
-  asyncExcute.call(this, function() {
+  var tasks = this.tasks,
+    self = this;
+  asyncExcute(function() {
     var taskLength = tasks.length,
-      i = 0,
+      i = -1,
       func,
       result;
-    while (i < taskLength) {
-      func = tasks[i].func;
+    while (i < taskLength - 1) {
+      i++;
+      if (tasks[i].isdone) {
+        // 只能被调用一次
+        continue;
+      }
+      tasks[i].isdone = true;
+      func = tasks[i][type];
       if (isFunction(func)) {
         try {
-          result = func(this.value);
+          result = func(self.value);
+          resolvePromise(tasks[i].promise, result);
         } catch (err) {
           onRejected.call(tasks[i].promise, err);
         }
       } else {
         if (type == "resolve") {
-          result = this.value;
+          result = self.value;
+          resolvePromise(tasks[i].promise, result);
         } else {
-          onRejected.call(tasks[i].promise, this.value);
+          onRejected.call(tasks[i].promise, self.value);
         }
       }
-      resolvePromise(tasks[i].promise, result);
-      i++;
     }
   });
 }
@@ -88,18 +98,10 @@ function isFunction(func) {
 }
 
 function resolvePromise(pro, x) {
+  var isdone = false;
   if (pro == x) {
     onRejected.call(pro, TypeError("不能相等"));
-  } else if (x instanceof Promise) {
-    x.then(
-      function(val) {
-        onFulfilled.call(pro, val);
-      },
-      function(val) {
-        onRejected.call(pro, val);
-      }
-    );
-  } else if (isFunction(x) || typeof x == "object") {
+  } else if (isFunction(x) || (x != null && typeof x == "object")) {
     try {
       var then = x.then;
     } catch (err) {
@@ -110,14 +112,26 @@ function resolvePromise(pro, x) {
       try {
         then.call(
           x,
-          function(val) {
-            onFulfilled.call(pro, val);
+          function(y) {
+            if (isdone) {
+              return;
+            }
+            isdone = true;
+            resolvePromise(pro, y);
           },
-          function(val) {
-            onRejected.call(pro, val);
+          function(y) {
+            if (isdone) {
+              return;
+            }
+            isdone = true;
+            onRejected.call(pro, y);
           }
         );
       } catch (err) {
+        if (isdone) {
+          return;
+        }
+        isdone = true;
         onRejected.call(pro, err);
       }
     } else {
