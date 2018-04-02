@@ -71,11 +71,11 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
       this.handled = null;
     }
   }
-  if (this.state !== PENDING) {
+  if (this.state !== PENDING) {   // 执行then方法时,promise状态已经改变了
     var resolver = this.state === FULFILLED ? onFulfilled : onRejected;
-    unwrap(promise, resolver, this.outcome);
-  } else {
-    this.queue.push(new QueueItem(promise, onFulfilled, onRejected));
+    unwrap(promise, resolver, this.outcome);        // 异步执行then方法传入的回调
+  } else {      // promise还是pending,则先放入队列中 (调用resolve,reject会执行队列)
+    this.queue.push(new QueueItem(promise, onFulfilled, onRejected));   
   }
 
   return promise;
@@ -121,20 +121,28 @@ function unwrap(promise, func, value) {
 }
 
 handlers.resolve = function(self, value) {
-  var result = tryCatch(getThen, value);
-  if (result.status === "error") {
-    return handlers.reject(self, result.value);
+  var result = tryCatch(getThen, value);  // 试图从value中获取then方法
+  if (result.status === "error") {        // 如果获取then方法时抛出异常
+    return handlers.reject(self, result.value);  // 以error作为拒因
   }
   var thenable = result.value;
 
-  if (thenable) {
+  if (thenable) {   
+    /*
+        为真说明value值具有then方法  
+        例如: value为一个promise
+        value = new Promise((re,rj)=>{
+            re();
+        });
+        resolve(value);
+    */
     safelyResolveThenable(self, thenable);
   } else {
     self.state = FULFILLED;
     self.outcome = value;
     var i = -1;
     var len = self.queue.length;
-    while (++i < len) {
+    while (++i < len) {       // 按照顺序执行当前pormise的所有成功回调
       self.queue[i].callFulfilled(value);
     }
   }
