@@ -16,5 +16,8 @@
   "bugs": {
     "url": "https://github.com/julyL/simple-promise.js/issues"
   },
-  "homepage": "https://github.com/julyL/simple-promise.js#readme"
+  "homepage": "https://github.com/julyL/simple-promise.js#readme",
+  "dependencies": {
+    "immediate": "^3.2.3"
+  }
 }
