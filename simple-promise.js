@@ -12,6 +12,7 @@ function Promise(func) {
   this.value = undefined;
   this.status = "pending";
   this.tasks = [];
+  this.promiseEvent = new PromiseEvent();
   if (isFunction(func)) {
     try {
       func.call(this, onFulfilled.bind(this), onRejected.bind(this));
@@ -23,18 +24,22 @@ function Promise(func) {
   }
 }
 
-Promise.prototype.then = function(resolveFunc, rejectFunc) {
-  var promise = new Promise(function() {});
+Promise.prototype.then = function (resolveFunc, rejectFunc) {
+  var promise = new Promise(function () {}),
+    self = this;
 
   // 当Promise对象的状态已经为resolved或者rejected, 那么then方法将根据Promise对象当前状态异步执行相应的队列
   // 由于队列中之前函数都已经执行并且isdone被标记为true, 实际只会(也只需要)执行当前的resolveFunc或者rejectFunc
   if (this.status == "resolved") {
-    excuteTasks.call(this, "resolved");
+    excuteTasks.call(self, "resolved");
     promise.value = this.value;
-  }
-  if (this.status == "rejected") {
-    excuteTasks.call(this, "rejected");
+  } else if (this.status == "rejected") {
+    excuteTasks.call(self, "rejected");
     promise.value = this.value;
+  } else {
+    this.promiseEvent.on("changeStatus", function (status) {
+      excuteTasks.call(self, status);
+    })
   }
 
   this.tasks.push({
@@ -52,7 +57,8 @@ Promise.prototype.then = function(resolveFunc, rejectFunc) {
  */
 function onFulfilled(value) {
   if (this.status == "pending") {
-    excuteTasks.call(this, "resolved");
+    this.promiseEvent.emit("changeStatus", "resolved");
+    // excuteTasks.call(this, "resolved");
     this.status = "resolved";
     this.value = value;
   }
@@ -60,7 +66,8 @@ function onFulfilled(value) {
 
 function onRejected(value) {
   if (this.status == "pending") {
-    excuteTasks.call(this, "rejected");
+    this.promiseEvent.emit("changeStatus", "rejected");
+    // excuteTasks.call(this, "rejected");
     this.status = "rejected";
     this.value = value;
   }
@@ -71,7 +78,7 @@ function onRejected(value) {
  * @param {Function} fn
  */
 function asyncExcute(fn) {
-  setTimeout(function() {
+  setTimeout(function () {
     fn();
   }, 0);
 }
@@ -83,7 +90,7 @@ function asyncExcute(fn) {
 function excuteTasks(status) {
   var tasks = this.tasks,
     self = this;
-  asyncExcute(function() {
+  asyncExcute(function () {
     var taskLength = tasks.length,
       i = -1,
       func,
@@ -145,7 +152,7 @@ function resolvePromise(pro, x) {
       if (isFunction(then)) {
         then.call(
           x,
-          function(y) {
+          function (y) {
             if (isdone) {
               /*
                 isdone用于确保thenable对象的状态只能改变一次(不可逆). 
@@ -157,7 +164,7 @@ function resolvePromise(pro, x) {
             isdone = true;
             resolvePromise(pro, y);
           },
-          function(y) {
+          function (y) {
             if (isdone) {
               return;
             }
@@ -179,6 +186,48 @@ function resolvePromise(pro, x) {
   } else {
     // x为其他值
     onFulfilled.call(pro, x);
+  }
+}
+
+/*
+Promise内部的观察者模式采用PromiseEvent实现
+
+resolve() 内部会执行emit,来异步执行通过then绑定的回调队列
+then() 内部会执行on来向队列中添加新的回调
+
+但有一个问题就是: 执行resolve时,then方法还没有执行。导致emit触发了,on还没有绑定事件,从而then绑定的回调没法执行。
+解决: 只需在执行on时,判断是否已经执行过emit,如果emit已经执行则直接执行回调,不进行事件绑定。 
+
+*/
+var PromiseEvent = function () {
+  this.eventList = {};
+  this.status = 'pending';
+}
+
+PromiseEvent.prototype = {
+  on: function (eventName, fn) {
+    if (this.status != 'pending') { // 如果事件已经emit过了
+      fn.call(null, this.status)
+      return;
+    }
+    var eventArray = this.eventList[eventName]
+    if (Array.isArray(eventArray)) {
+      eventArray.push(fn);
+    } else {
+      this.eventList[eventName] = [fn];
+    }
+  },
+  emit: function (eventName, /*arg*/ ) {
+    var eventArray = this.eventList[eventName],
+      args = [].slice.call(arguments, 1),
+      self;
+
+    this.status = args[0]; // 记录emit已经执行
+    if (Array.isArray(eventArray)) {
+      eventArray.forEach(function (handle) {
+        handle.apply(null, args)
+      })
+    }
   }
 }
 

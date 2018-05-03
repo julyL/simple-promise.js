@@ -10,6 +10,9 @@
     "type": "git",
     "url": "git+https://github.com/julyL/simple-promise.js.git"
   },
+  "scripts": {
+     "test": "./node_modules/.bin/promises-aplus-tests test/index.js "
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",

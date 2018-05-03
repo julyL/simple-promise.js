@@ -1,30 +1,27 @@
-## simple-promise.js
-> 基础的Promise实现,已通过Promise A+测试
+### simple-promise.js
+> 基于Promise A+规范实现的Promise,已通过Promise A+测试
 
-```
- // 测试步骤
- npm i promises-aplus-tests -g
-
- promises-aplus-tests test/simple-promise.js  
+```console
+ npm install 
+ npm run test  // 进行Promise A+测试
 ```
 
-#### promise异步执行发生在哪？
+#### Promise内什么时候执行异步,resolve or then?
 ```js
- new Promise((re,rj)=>{
+new Promise(resolve => {
+  console.log(1);
+  resolve(3);
+  new Promise((re, rj) => {
     re();
-    new Promise((re, rj) => {
-        re();
-        console.log(-1)
-    }).then(() => {
-        console.log(2)
-    })
-    console.log(0)
- }).then(()=>{
-     console.log(3)
- })
- console.log(1)
+  }).then(() => {
+    console.log(4)
+  })
+  console.log(5);
+}).then(num => {
+  console.log(num);
+});
+console.log(2);
  
-// simple-promises输出:  -1 0 1 3 2    simple-promise.js的异步逻辑是在resolve方法和then方法中的
-// 原生Promise输出:      -1 0 1 2 3    应该是发生在then方法中
+// 1 5 2 4 3    这里先执行then先输出
 ```
-> 原生Promise的异步是发生在执行then方法时的,所以在同一事件循环中先执行then方法的,会先执行then方法传入的回调函数
+> 执行then方法时会异步执行回调,resolve执行是同步的。所以在同一事件循环中先执行then方法的,对应的回调会先执行。
