@@ -1,15 +1,29 @@
-// var Promise = require("./index");
-// var Promise = require("../simple-promise.js");
-new Promise(resolve => {
+var Promise = require("./index");
+
+// then之前已经resolve 
+// var p1 = new Promise(resolve => {
+//   console.log(1);
+//   resolve(3);
+//   console.log(5);
+// })
+
+// p1.then(v=>{
+//   console.log('6');
+// })
+// console.log(2);
+
+
+
+// then之后再resolve
+var p1 = new Promise(resolve => {
   console.log(1);
-  resolve(3);
-  new Promise((re, rj) => {
-    re();
-  }).then(() => {
-    console.log(4)
-  })
-  console.log(5);
-}).then(num => {
-  console.log(num);
-});
+  setTimeout(() => {
+    resolve(3);
+  }, 10);
+   console.log(5);
+})
+
+p1.then(v => {
+  console.log('6');
+})
 console.log(2);

@@ -64,7 +64,7 @@ Promise.prototype.then = function(onFulfilled, onRejected) {
   ) {
     return this;
   }
-  var promise = new this.constructor(INTERNAL);
+  var promise = new this.constructor(INTERNAL);  // 调用then方法会新建一个Promise对象
   /* istanbul ignore else */
   if (!process.browser) {
     if (this.handled === UNHANDLED) {
@@ -104,15 +104,16 @@ QueueItem.prototype.otherCallRejected = function(value) {
   unwrap(this.promise, this.onRejected, value);
 };
 
+// 执行then方法时内部异步执行的逻辑
 function unwrap(promise, func, value) {
-  immediate(function() {
+  immediate(function() {      
     var returnValue;
     try {
       returnValue = func(value);
     } catch (e) {
       return handlers.reject(promise, e);
     }
-    if (returnValue === promise) {
+    if (returnValue === promise) {   // then方法返回的Promise对象不能等于调用then方法的Promise对象
       handlers.reject(promise, new TypeError("Cannot resolve promise with itself"));
     } else {
       handlers.resolve(promise, returnValue);
@@ -127,15 +128,7 @@ handlers.resolve = function(self, value) {
   }
   var thenable = result.value;
 
-  if (thenable) {   
-    /*
-        为真说明value值具有then方法  
-        例如: value为一个promise
-        value = new Promise((re,rj)=>{
-            re();
-        });
-        resolve(value);
-    */
+  if (thenable) { //  result.value为真说明 resolve(val)中的val是一个具有then方法的thenable
     safelyResolveThenable(self, thenable);
   } else {
     self.state = FULFILLED;
@@ -169,6 +162,7 @@ handlers.reject = function(self, error) {
   return self;
 };
 
+// 如果obj是一个thenable(有then方法),则返回一个函数用于执行then方法
 function getThen(obj) {
   // Make sure we only access the accessor once as required by the spec
   var then = obj && obj.then;
@@ -181,8 +175,8 @@ function getThen(obj) {
 
 function safelyResolveThenable(self, thenable) {
   // Either fulfill, reject or reject with error
-  var called = false;
-  function onError(value) {
+  var called = false;        // 用于记录函数内部状态只能变化一次
+  function onError(value) {  // 将Promise状态变化rejectd的函数
     if (called) {
       return;
     }
@@ -190,7 +184,7 @@ function safelyResolveThenable(self, thenable) {
     handlers.reject(self, value);
   }
 
-  function onSuccess(value) {
+  function onSuccess(value) { // 将Promise状态变化resolved的函数
     if (called) {
       return;
     }
@@ -203,7 +197,7 @@ function safelyResolveThenable(self, thenable) {
   }
 
   var result = tryCatch(tryToUnwrap);
-  if (result.status === "error") {
+  if (result.status === "error") { // Promise中的回调执行时抛出异常,则将拒因传入onError
     onError(result.value);
   }
 }

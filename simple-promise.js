@@ -12,7 +12,6 @@ function Promise(func) {
   this.value = undefined;
   this.status = "pending";
   this.tasks = [];
-  this.promiseEvent = new PromiseEvent();
   if (isFunction(func)) {
     try {
       func.call(this, onFulfilled.bind(this), onRejected.bind(this));
@@ -24,23 +23,14 @@ function Promise(func) {
   }
 }
 
+/*
+ * then方法做了如下处理:
+ * 1. status为resolved或rejected,则执行task中相应的队列
+ * 2. 向task中添加任务
+ */
 Promise.prototype.then = function (resolveFunc, rejectFunc) {
   var promise = new Promise(function () {}),
     self = this;
-
-  // 当Promise对象的状态已经为resolved或者rejected, 那么then方法将根据Promise对象当前状态异步执行相应的队列
-  // 由于队列中之前函数都已经执行并且isdone被标记为true, 实际只会(也只需要)执行当前的resolveFunc或者rejectFunc
-  if (this.status == "resolved") {
-    excuteTasks.call(self, "resolved");
-    promise.value = this.value;
-  } else if (this.status == "rejected") {
-    excuteTasks.call(self, "rejected");
-    promise.value = this.value;
-  } else {
-    this.promiseEvent.on("changeStatus", function (status) {
-      excuteTasks.call(self, status);
-    })
-  }
 
   this.tasks.push({
     resolved: resolveFunc,
@@ -48,17 +38,22 @@ Promise.prototype.then = function (resolveFunc, rejectFunc) {
     promise: promise,
     isdone: false
   });
+
+  if (this.status == "resolved" || this.status == 'rejected') {
+    asyncExcuteTasks.call(self, this.status);
+    promise.value = this.value;
+  }
+
   return promise;
 };
 
 /**
- * 将当前this指向的Promise对象状态变为resolved,并异步执行队列
+ * 执行resolved对应的队列
  * @param {*} value
  */
 function onFulfilled(value) {
   if (this.status == "pending") {
-    this.promiseEvent.emit("changeStatus", "resolved");
-    // excuteTasks.call(this, "resolved");
+    asyncExcuteTasks.call(this, "resolved");
     this.status = "resolved";
     this.value = value;
   }
@@ -66,8 +61,7 @@ function onFulfilled(value) {
 
 function onRejected(value) {
   if (this.status == "pending") {
-    this.promiseEvent.emit("changeStatus", "rejected");
-    // excuteTasks.call(this, "rejected");
+    asyncExcuteTasks.call(this, "rejected");
     this.status = "rejected";
     this.value = value;
   }
@@ -84,10 +78,10 @@ function asyncExcute(fn) {
 }
 
 /**
- * 根据status的值按照顺序异步执行相应的队列
+ * 根据Promise的状态值status来按照顺序异步执行tasks中相应的队列
  * @param {String} status
  */
-function excuteTasks(status) {
+function asyncExcuteTasks(status) {
   var tasks = this.tasks,
     self = this;
   asyncExcute(function () {
@@ -106,9 +100,7 @@ function excuteTasks(status) {
       if (isFunction(func)) {
         try {
           result = func(self.value);
-          // resolvePromise和onFulfilled区分:
-          // onFulfilled不会管value是什么值,都会改变promsie状态为resolved
-          // resolvePromise能处理value为promise或者thenable的情况,并且最终还是会调用onResolved或者onRejected来结束. promise状态可能为resolved或者rejected
+          // resolvePromise会根据resolve传入的val,来执行onFulfilled或者onRejected(如果val为Promise对象或者thenable对象,则根据val的状态来执行相应的队列)
           resolvePromise(tasks[i].promise, result);
         } catch (err) {
           onRejected.call(tasks[i].promise, err);
@@ -132,9 +124,8 @@ function isFunction(func) {
 }
 
 /**
- * 根据x来决定pro是resolved还是rejected状态
- * @param {Promise} pro then方法返回的Promise对象
- * @param {*} x then方法接受2个函数作为参数,这2个函数return的值即为x
+ * @param {Promise} pro: then方法返回的Promise对象
+ * @param {*} x: then方法接受2个函数作为参数,这2个函数return的值即为x
  */
 function resolvePromise(pro, x) {
   var isdone = false;
@@ -186,48 +177,6 @@ function resolvePromise(pro, x) {
   } else {
     // x为其他值
     onFulfilled.call(pro, x);
-  }
-}
-
-/*
-Promise内部的观察者模式采用PromiseEvent实现
-
-resolve() 内部会执行emit,来异步执行通过then绑定的回调队列
-then() 内部会执行on来向队列中添加新的回调
-
-但有一个问题就是: 执行resolve时,then方法还没有执行。导致emit触发了,on还没有绑定事件,从而then绑定的回调没法执行。
-解决: 只需在执行on时,判断是否已经执行过emit,如果emit已经执行则直接执行回调,不进行事件绑定。 
-
-*/
-var PromiseEvent = function () {
-  this.eventList = {};
-  this.status = 'pending';
-}
-
-PromiseEvent.prototype = {
-  on: function (eventName, fn) {
-    if (this.status != 'pending') { // 如果事件已经emit过了
-      fn.call(null, this.status)
-      return;
-    }
-    var eventArray = this.eventList[eventName]
-    if (Array.isArray(eventArray)) {
-      eventArray.push(fn);
-    } else {
-      this.eventList[eventName] = [fn];
-    }
-  },
-  emit: function (eventName, /*arg*/ ) {
-    var eventArray = this.eventList[eventName],
-      args = [].slice.call(arguments, 1),
-      self;
-
-    this.status = args[0]; // 记录emit已经执行
-    if (Array.isArray(eventArray)) {
-      eventArray.forEach(function (handle) {
-        handle.apply(null, args)
-      })
-    }
   }
 }
 
