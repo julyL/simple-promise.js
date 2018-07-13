@@ -1,4 +1,5 @@
-var Promise = require("./index");
+// demo for debug
+var Promise = require("./lie");
 
 // then之前已经resolve 
 // var p1 = new Promise(resolve => {
